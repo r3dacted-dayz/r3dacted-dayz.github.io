@@ -26,7 +26,10 @@ AUS = os.path.join(WEB, 'wiki')
 ASSETS = os.path.join(HIER, 'assets')
 SITE = 'https://r3dacted-dayz.github.io'
 
-# Themen-Feeds, die reine Listen-Duplikate der Quest-/FAQ-Daten sind (stehen auf quests.html / faq.html)
+# Maßgeblich ist, was im HAUPT-Discord im Wiki steht (_stand.json, Schluessel = Gilden-ID).
+# Die Test-Gilde (1520238472764457061) ist NICHT massgeblich. Neue Posts im Haupt-Discord erscheinen automatisch.
+HAUPT_GILDE = '1365413786919374999'
+# Themen-Feeds, die reine Listen-Duplikate der FAQ-Daten sind (faq steht auf faq.html)
 AUSGESCHLOSSEN = {'faq', 'quests-board', 'quests-peter', 'quests-steve'}
 # Titel, die sich nicht sauber an " / " teilen lassen
 TITEL_FIX = {'regeln-r3dacted': ('Regeln – R3DACTED', 'Rules – R3DACTED')}
@@ -46,6 +49,21 @@ MOD_NAMEN = {  # aus schnittstelle-bot-daten.md (Mod-Kuerzel)
 }
 HAENDLER_REIHE = ['Naomi', 'Maria', 'Quinn', 'Rolf', 'Hassan', 'Wechsel-Automat']
 TYP = {'story': ('Story', 'Story'), 'daily': ('Täglich', 'Daily'), 'weekly': ('Wöchentlich', 'Weekly')}
+
+def haupt_slugs():
+    with open(os.path.join(QUELLE, '_stand.json'), encoding='utf-8') as f:
+        st = json.load(f)
+    if HAUPT_GILDE not in st:
+        raise SystemExit('Gilde %s nicht in _stand.json' % HAUPT_GILDE)
+    return set(st[HAUPT_GILDE])
+
+
+HAUPT = haupt_slugs()
+# Schalter: Items-/Quests-Seite nur, wenn der Haupt-Discord ein entsprechendes Wiki-Thema ('items'/'quests') fuehrt.
+MIT_ITEMS = 'items' in HAUPT
+MIT_QUESTS = 'quests' in HAUPT
+# FAQ ist live, sobald der Slug 'faq' im Haupt-Discord steht
+MIT_FAQ = 'faq' in HAUPT
 
 DATEIEN = {}      # relativer Pfad (zu AUS) -> Inhalt (str|bytes)
 WARN = []
@@ -365,8 +383,13 @@ def render_blocks(thema, base):
 # ---------------------------------------------------------------- Seiten-Geruest
 def kopf(base, key, tde, ten, dde, den, canon):
     root = base + '../'
-    nav = [('index', base or './', 'Wiki', 'Wiki'), ('items', base + 'items.html', 'Items', 'Items'),
-           ('quests', base + 'quests.html', 'Quests', 'Quests'), ('faq', base + 'faq.html', 'FAQ', 'FAQ')]
+    nav = [('index', base or './', 'Wiki', 'Wiki')]
+    if MIT_ITEMS:
+        nav.append(('items', base + 'items.html', 'Items', 'Items'))
+    if MIT_QUESTS:
+        nav.append(('quests', base + 'quests.html', 'Quests', 'Quests'))
+    if MIT_FAQ:
+        nav.append(('faq', base + 'faq.html', 'FAQ', 'FAQ'))
     navh = ''.join('<a href="%s"%s>%s</a>' % (u, ' aria-current="page"' if k == key else '', L(a, b)) for k, u, a, b in nav)
     suche = ''
     if key != 'index':
@@ -428,6 +451,11 @@ def seite(pfad, base, key, tde, ten, dde, den, body, stand):
 
 
 # ---------------------------------------------------------------- Hauptprogramm
+ITEMS_KACHEL = '    <a class="tile big" href="items.html"><span class="ti">🎒</span><span class="tt">Items</span><span class="td">%s</span></a>\n'
+QUESTS_KACHEL = '    <a class="tile big" href="quests.html"><span class="ti">📜</span><span class="tt">Quests</span><span class="td">%s</span></a>\n'
+FAQ_KACHEL = '    <a class="tile big" href="faq.html"><span class="ti">❓</span><span class="tt">FAQ</span><span class="td">%s</span></a>\n'
+
+
 def zahl_de(n):
     return '{:,}'.format(n).replace(',', '.')
 
@@ -451,7 +479,7 @@ def main():
         n = os.path.basename(p)
         if n.startswith('_') or '.bak' in n or n.count('.') != 1:
             continue
-        if n[:-5] in AUSGESCHLOSSEN:
+        if n[:-5] in AUSGESCHLOSSEN or n[:-5] not in HAUPT:
             continue
         themen.append(bauen_thema(p))
         quell_dateien.append(p)
@@ -460,7 +488,13 @@ def main():
 
     # ---- Items -> kompakte Tabelle
     cats, cat_idx, mods, mod_idx = [], {}, [], {}
-    hand = list(HAENDLER_REIHE)
+    hand = list(HAENDLER_REIHE) if MIT_ITEMS else []
+    if not MIT_ITEMS:
+        items_roh = []
+    if not MIT_QUESTS:
+        quests = []
+    if not MIT_FAQ:
+        faq = []
     for it in items_roh:
         for h in it.get('haendler') or []:
             if h not in hand:
@@ -523,8 +557,8 @@ def main():
   <p class="sub">%(sub)s</p>
   <form class="gsuche" id="sform" action="./" method="get" role="search">
     <input id="q" name="q" type="search" autocomplete="off" autofocus spellcheck="false"
-      data-ph-de="Suchen: Item, Quest, Händler, Frage … (z. B. m4a1, Hassan, Bitcoin)" data-ph-en="Search: item, quest, trader, question … (e.g. m4a1, Hassan, Bitcoin)"
-      placeholder="Suchen: Item, Quest, Händler, Frage …" data-al-de="Wiki durchsuchen" data-al-en="Search the wiki" aria-label="Wiki durchsuchen">
+      data-ph-de="Suchen: Thema, Frage … (z. B. Regeln, Season Pass, Bitcoin)" data-ph-en="Search: topic, question … (e.g. rules, season pass, bitcoin)"
+      placeholder="Suchen: Thema, Frage …" data-al-de="Wiki durchsuchen" data-al-en="Search the wiki" aria-label="Wiki durchsuchen">
     <button type="submit">%(go)s</button>
   </form>
   <p class="hint">%(hint)s</p>
@@ -534,9 +568,7 @@ def main():
 <div id="results" hidden></div>
 <div id="start">
   <div class="einstieg">
-    <a class="tile big" href="items.html"><span class="ti">🎒</span><span class="tt">Items</span><span class="td">%(items)s</span></a>
-    <a class="tile big" href="quests.html"><span class="ti">📜</span><span class="tt">Quests</span><span class="td">%(quests)s</span></a>
-    <a class="tile big" href="faq.html"><span class="ti">❓</span><span class="tt">FAQ</span><span class="td">%(faq)s</span></a>
+%(einstieg)s
   </div>
   <h2>%(themen)s</h2>
   <div class="tiles">%(kacheln)s</div>
@@ -544,17 +576,18 @@ def main():
 """ % {
         'sub': L('Alles über den DayZ-Server auf Nasdara – durchsuchbar.', 'Everything about the DayZ server on Nasdara – searchable.'),
         'go': L('Suchen', 'Search'),
-        'hint': L('Tippfehler, Umlaute und Bindestriche sind egal: „m4a1“ findet „M4-A1“. Tastatur: / zum Suchen, ↑ ↓ zum Wählen, Esc zum Leeren.',
-                  'Typos, umlauts and hyphens do not matter: “m4a1” finds “M4-A1”. Keys: / to search, ↑ ↓ to pick, Esc to clear.'),
+        'hint': L('Tippfehler, Umlaute und Bindestriche sind egal. Tastatur: / zum Suchen, ↑ ↓ zum Wählen, Esc zum Leeren.',
+                  'Typos, umlauts and hyphens do not matter. Keys: / to search, ↑ ↓ to pick, Esc to clear.'),
         'nojs': L('Für Suche und Filter wird JavaScript benötigt. Die Themenseiten funktionieren auch ohne.',
                   'Search and filters need JavaScript. The topic pages work without it.'),
-        'items': L('%s handelbare Items mit Preisen' % zahl_de(n_i), '{:,} tradeable items with prices'.format(n_i)),
-        'quests': L('%d Quests mit Ziel & Belohnung' % n_q, '%d quests with goal & reward' % n_q),
-        'faq': L('%d häufige Fragen' % n_f, '%d frequently asked questions' % n_f),
+        'einstieg': ''.join(x for x in (
+            ITEMS_KACHEL % L('%s handelbare Items mit Preisen' % zahl_de(n_i), '{:,} tradeable items with prices'.format(n_i)) if MIT_ITEMS else '',
+            QUESTS_KACHEL % L('%d Quests mit Ziel & Belohnung' % n_q, '%d quests with goal & reward' % n_q) if MIT_QUESTS else '',
+            FAQ_KACHEL % L('%d häufige Fragen' % n_f, '%d frequently asked questions' % n_f) if MIT_FAQ else '') if x),
         'themen': L('Themen', 'Topics'), 'kacheln': ''.join(kacheln)}
     seite('index.html', '', 'index', 'Wiki', 'Wiki',
-          'Das R3DACTED-Wiki: Items, Preise, Quests, Händler, FAQ und Spielmechaniken – durchsuchbar.',
-          'The R3DACTED wiki: items, prices, quests, traders, FAQ and game mechanics – searchable.', body, stand)
+          'Das R3DACTED-Wiki: Regeln, Mods, Bosse, Fahrzeuge, Season Pass und FAQ – durchsuchbar.',
+          'The R3DACTED wiki: rules, mods, bosses, vehicles, season pass and FAQ – searchable.', body, stand)
 
     # ---- items.html
     body = """
@@ -648,6 +681,11 @@ def main():
     seite('faq.html', '', 'faq', 'FAQ', 'FAQ',
           'Häufige Fragen zu R3DACTED: Join, Wirtschaft, Quests, Basisbau, Season Pass, Support.',
           'Frequently asked questions about R3DACTED: joining, economy, quests, base building, season pass, support.', body, stand)
+
+    # ---- nicht veroeffentlichte Seiten wieder raus (Schalter oben); Aufraeumen unten loescht alte Dateien
+    for ok, name in ((MIT_ITEMS, 'items.html'), (MIT_QUESTS, 'quests.html'), (MIT_FAQ, 'faq.html')):
+        if not ok:
+            DATEIEN.pop(name, None)
 
     # ---- schreiben + aufraeumen
     for rel, b in IMG.items():
